@@ -1,91 +1,180 @@
-const STORAGE_KEY = "phonecrest_products";
 const WHATSAPP_NUMBER = "94769129718";
-const ADMIN_USERNAME_HASH = "be3d98b53fe9e7b50dd4d67f8f73cfd067dc79a8904bfb28c69d0d755a9a98f1";
-const ADMIN_PASSWORD_HASH = "a66dd0c341fc1c66f31623f81c2433630c7ee843b5265ba370c35dc0206635ef";
-const ADMIN_SESSION_KEY = "phonecrest_admin_auth";
+const ADMIN_SESSION_KEY = "plokama_admin_session";
+const config = window.PLOKAMA_CONFIG || {};
+const SUPABASE_URL = (config.supabaseUrl || "").replace(/\/$/, "");
+const SUPABASE_ANON_KEY = config.supabaseAnonKey || "";
 
-const defaultProducts = [];
+function isBackendConfigured() {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
 
-function getProducts() {
+function backendConfigurationError() {
+  return new Error("The product database is not configured yet. Please contact the store owner.");
+}
+
+function readAdminSession() {
+  const storedSession = sessionStorage.getItem(ADMIN_SESSION_KEY);
+  if (!storedSession) {
+    return null;
+  }
+
   try {
-    const savedProducts = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (!Array.isArray(savedProducts)) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
-      return [];
-    }
-
-    if (savedProducts.length === 0) {
-      return [];
-    }
-
-    if (defaultProducts.length === 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
-      return [];
-    }
-
-    const mergedProducts = savedProducts;
-    const productMap = new Map();
-
-    [...defaultProducts, ...mergedProducts].forEach((product) => {
-      if (!product || !product.name) {
-        return;
-      }
-      const key = product.id || product.name.toLowerCase();
-      if (!productMap.has(key)) {
-        productMap.set(key, product);
-      }
-    });
-
-    const finalProducts = Array.from(productMap.values());
-
-    if (finalProducts.length !== mergedProducts.length) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(finalProducts));
-      return finalProducts;
-    }
-
-    return finalProducts;
+    return JSON.parse(storedSession);
   } catch (error) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
-    return [];
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    return null;
   }
 }
 
-function saveProducts(products) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+function storeAdminSession(session) {
+  sessionStorage.setItem(
+    ADMIN_SESSION_KEY,
+    JSON.stringify({
+      accessToken: session.access_token,
+      refreshToken: session.refresh_token,
+      expiresAt: Date.now() + Number(session.expires_in || 3600) * 1000
+    })
+  );
 }
 
-function createBoxImage({ brand, title, subtitle, accent, base, detail, textColor = "#121a2a" }) {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900">
-      <defs>
-        <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stop-color="${base}"/>
-          <stop offset="100%" stop-color="#f2f5fb"/>
-        </linearGradient>
-      </defs>
-      <rect width="900" height="900" fill="url(#bg)"/>
-      <rect x="110" y="110" width="680" height="680" rx="26" fill="#f6f8fb" stroke="#d9e1ef" stroke-width="2"/>
-      <rect x="165" y="155" width="570" height="430" rx="22" fill="${accent}"/>
-      <rect x="220" y="196" width="120" height="58" rx="12" fill="#f2f5fb" opacity="0.9"/>
-      <text x="280" y="235" font-size="28" font-weight="700" text-anchor="middle" fill="#1a2338" font-family="Arial, sans-serif">${brand}</text>
-      <text x="450" y="338" font-size="68" font-weight="800" text-anchor="middle" fill="${textColor}" font-family="Arial, sans-serif">${title}</text>
-      <text x="450" y="402" font-size="28" font-weight="600" text-anchor="middle" fill="#334155" font-family="Arial, sans-serif">${subtitle}</text>
-      <rect x="210" y="455" width="480" height="120" rx="20" fill="#1e293b" opacity="0.12"/>
-      <text x="450" y="532" font-size="112" font-weight="900" text-anchor="middle" fill="#0f172a" font-family="Arial, sans-serif">${detail}</text>
-      <text x="450" y="640" font-size="26" font-weight="700" text-anchor="middle" fill="#0f172a" font-family="Arial, sans-serif">Power Bank</text>
-      <rect x="285" y="680" width="330" height="26" rx="13" fill="#1f2937" opacity="0.15"/>
-    </svg>
-  `;
+function clearAdminSession() {
+  sessionStorage.removeItem(ADMIN_SESSION_KEY);
+}
 
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+async function parseResponse(response) {
+  const text = await response.text();
+  let result = null;
+
+  if (text) {
+    try {
+      result = JSON.parse(text);
+    } catch (error) {
+      result = { message: text };
+    }
+  }
+
+  if (!response.ok) {
+    const message = result && (result.message || result.msg || result.error_description || result.error);
+    throw new Error(message || `Request failed (${response.status}).`);
+  }
+
+  return result;
+}
+
+async function refreshAdminSession(session) {
+  if (!session || !session.refreshToken) {
+    clearAdminSession();
+    throw new Error("Your admin session has expired. Please log in again.");
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ refresh_token: session.refreshToken })
+  });
+
+  if (!response.ok) {
+    try {
+      await parseResponse(response);
+    } catch (error) {
+      if (response.status === 400 || response.status === 401) {
+        clearAdminSession();
+        throw new Error("Your admin session has expired. Please log in again.");
+      }
+      throw error;
+    }
+  }
+
+  const refreshedSession = await parseResponse(response);
+  storeAdminSession(refreshedSession);
+  return refreshedSession.access_token;
+}
+
+async function getAdminAccessToken() {
+  const session = readAdminSession();
+  if (!session || !session.accessToken) {
+    throw new Error("Please log in to manage products.");
+  }
+
+  if (session.expiresAt <= Date.now() + 30000) {
+    return refreshAdminSession(session);
+  }
+
+  return session.accessToken;
+}
+
+async function supabaseRequest(path, options = {}) {
+  if (!isBackendConfigured()) {
+    throw backendConfigurationError();
+  }
+
+  const headers = {
+    apikey: SUPABASE_ANON_KEY,
+    "Content-Type": "application/json",
+    ...(options.headers || {})
+  };
+
+  if (options.authenticated) {
+    headers.Authorization = `Bearer ${await getAdminAccessToken()}`;
+  } else {
+    headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+  }
+
+  const response = await fetch(`${SUPABASE_URL}${path}`, {
+    method: options.method || "GET",
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+  if (response.status === 401 && options.authenticated) {
+    clearAdminSession();
+    document.dispatchEvent(new Event("admin-session-expired"));
+    throw new Error("Your admin session has expired. Please log in again.");
+  }
+  return parseResponse(response);
 }
 
 function formatCurrency(amount) {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-LK", {
     style: "currency",
-    currency: "TZS",
+    currency: "LKR",
     maximumFractionDigits: 0
   }).format(amount);
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => {
+    const entities = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    };
+    return entities[character];
+  });
+}
+
+function safeImageUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function setStatus(element, message, isError = false) {
+  if (!element) {
+    return;
+  }
+
+  element.textContent = message;
+  element.classList.toggle("hidden", !message);
+  element.classList.toggle("status-error", isError);
+  element.classList.toggle("status-success", Boolean(message) && !isError);
 }
 
 function openWhatsApp(product) {
@@ -94,18 +183,19 @@ function openWhatsApp(product) {
   window.open(whatsappUrl, "_blank", "noopener,noreferrer");
 }
 
-function setupHomePage() {
-  const products = getProducts();
-  const productGrid = document.querySelector("#product-grid");
-  if (!productGrid) {
-    return;
-  }
+async function getProducts() {
+  const rows = await supabaseRequest(
+    "/rest/v1/products?select=id,name,category,price,image,description&order=created_at.desc"
+  );
+  return Array.isArray(rows) ? rows : [];
+}
 
+function renderProductCards(products, productGrid) {
   if (products.length === 0) {
     productGrid.innerHTML = `
       <div class="empty-state">
         <h3>No products available yet</h3>
-        <p>Add inventory from the admin panel to display products in the store.</p>
+        <p>Our catalog is being updated. Contact us on WhatsApp for current availability.</p>
       </div>
     `;
     return;
@@ -114,115 +204,254 @@ function setupHomePage() {
   productGrid.innerHTML = products
     .map(
       (product) => `
-        <article class="product-card" data-id="${product.id}" tabindex="0">
-          <img src="${product.image}" alt="${product.name}" />
+        <article class="product-card" data-id="${escapeHtml(product.id)}" tabindex="0">
+          <img src="${escapeHtml(safeImageUrl(product.image))}" alt="${escapeHtml(product.name)}" />
           <div class="product-body">
             <div class="product-meta">
-              <span class="category-pill">${product.category}</span>
+              <span class="category-pill">${escapeHtml(product.category)}</span>
               <span class="product-price">${formatCurrency(product.price)}</span>
             </div>
-            <h3>${product.name}</h3>
-            <p>${product.description}</p>
+            <h3>${escapeHtml(product.name)}</h3>
+            <p>${escapeHtml(product.description)}</p>
             <div class="card-actions">
-              <button class="secondary-btn" type="button" data-detail-id="${product.id}">View details</button>
-              <button class="primary-btn" type="button" data-buy-id="${product.id}">Buy now</button>
+              <button class="secondary-btn" type="button" data-detail-id="${escapeHtml(product.id)}">View details</button>
+              <button class="primary-btn" type="button" data-buy-id="${escapeHtml(product.id)}">Buy now</button>
             </div>
           </div>
         </article>
       `
     )
     .join("");
+}
 
-  const modal = document.querySelector("#product-modal");
-  const modalTitle = document.querySelector("#modal-title");
-  const modalCategory = document.querySelector("#modal-category");
-  const modalPrice = document.querySelector("#modal-price");
-  const modalDescription = document.querySelector("#modal-description");
-  const modalImage = document.querySelector("#modal-image");
-  const buyNowBtn = document.querySelector("#buy-now-btn");
+async function setupHomePage() {
+  const productGrid = document.querySelector("#product-grid");
+  if (!productGrid) {
+    return;
+  }
 
-  const closeModal = () => {
-    modal.classList.add("hidden");
-  };
+  productGrid.innerHTML = '<p class="catalog-status">Loading products…</p>';
 
-  document.querySelectorAll("[data-detail-id]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const product = products.find((item) => item.id === button.dataset.detailId);
-      if (!product) return;
+  try {
+    const products = await getProducts();
+    renderProductCards(products, productGrid);
+    if (products.length === 0) {
+      return;
+    }
 
+    const modal = document.querySelector("#product-modal");
+    const modalTitle = document.querySelector("#modal-title");
+    const modalCategory = document.querySelector("#modal-category");
+    const modalPrice = document.querySelector("#modal-price");
+    const modalDescription = document.querySelector("#modal-description");
+    const modalImage = document.querySelector("#modal-image");
+    const buyNowButton = document.querySelector("#buy-now-btn");
+
+    const showProduct = (product) => {
       modalTitle.textContent = product.name;
       modalCategory.textContent = product.category;
       modalPrice.textContent = formatCurrency(product.price);
       modalDescription.textContent = product.description;
-      modalImage.src = product.image;
+      modalImage.src = safeImageUrl(product.image);
       modalImage.alt = product.name;
-      buyNowBtn.dataset.buyId = product.id;
+      buyNowButton.dataset.buyId = product.id;
       modal.classList.remove("hidden");
-    });
-  });
+    };
 
-  document.querySelectorAll("[data-buy-id]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const product = products.find((item) => item.id === button.dataset.buyId);
-      if (product) {
-        openWhatsApp(product);
+    const closeModal = () => modal.classList.add("hidden");
+
+    productGrid.addEventListener("click", (event) => {
+      const target = event.target;
+      const detailButton = target.closest("[data-detail-id]");
+      const buyButton = target.closest("[data-buy-id]");
+
+      if (detailButton) {
+        event.stopPropagation();
+        const product = products.find((item) => item.id === detailButton.dataset.detailId);
+        if (product) showProduct(product);
+        return;
+      }
+
+      if (buyButton) {
+        event.stopPropagation();
+        const product = products.find((item) => item.id === buyButton.dataset.buyId);
+        if (product) openWhatsApp(product);
+        return;
+      }
+
+      const card = target.closest(".product-card");
+      const product = card && products.find((item) => item.id === card.dataset.id);
+      if (product) showProduct(product);
+    });
+
+    buyNowButton.addEventListener("click", () => {
+      const product = products.find((item) => item.id === buyNowButton.dataset.buyId);
+      if (product) openWhatsApp(product);
+    });
+
+    document.querySelectorAll(".close-modal").forEach((button) => {
+      button.addEventListener("click", closeModal);
+    });
+    document.querySelector("[data-close-modal='true']").addEventListener("click", closeModal);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !modal.classList.contains("hidden")) {
+        closeModal();
       }
     });
-  });
+  } catch (error) {
+    productGrid.innerHTML = `
+      <div class="empty-state">
+        <h3>We couldn’t load the catalog</h3>
+        <p>${escapeHtml(error.message)} If the problem continues, contact us on WhatsApp.</p>
+      </div>
+    `;
+  }
+}
 
-  productGrid.addEventListener("click", (event) => {
-    const card = event.target.closest(".product-card");
-    if (!card) return;
-    if (event.target.closest("button")) return;
+function setupAdminPage() {
+  const form = document.querySelector("#product-form");
+  const productList = document.querySelector("#admin-product-list");
+  const saveButton = document.querySelector("#save-product-btn");
+  const resetButton = document.querySelector("#reset-form-btn");
+  const status = document.querySelector("#admin-status");
 
-    const product = products.find((item) => item.id === card.dataset.id);
-    if (!product) return;
+  if (!form || !productList) {
+    return null;
+  }
 
-    modalTitle.textContent = product.name;
-    modalCategory.textContent = product.category;
-    modalPrice.textContent = formatCurrency(product.price);
-    modalDescription.textContent = product.description;
-    modalImage.src = product.image;
-    modalImage.alt = product.name;
-    buyNowBtn.dataset.buyId = product.id;
-    modal.classList.remove("hidden");
-  });
+  const resetForm = () => {
+    form.reset();
+    document.querySelector("#product-id").value = "";
+    saveButton.textContent = "Save product";
+  };
 
-  buyNowBtn.addEventListener("click", () => {
-    const product = products.find((item) => item.id === buyNowBtn.dataset.buyId);
-    if (product) {
-      openWhatsApp(product);
+  const renderAdminProducts = async () => {
+    productList.innerHTML = '<p class="catalog-status">Loading inventory…</p>';
+    try {
+      const products = await getProducts();
+      productList.innerHTML = products
+        .map(
+          (product) => `
+            <article class="admin-product-item">
+              <img src="${escapeHtml(safeImageUrl(product.image))}" alt="${escapeHtml(product.name)}" />
+              <div class="admin-product-copy">
+                <h3>${escapeHtml(product.name)}</h3>
+                <p><strong>${escapeHtml(product.category)}</strong> · ${formatCurrency(product.price)}</p>
+                <p>${escapeHtml(product.description)}</p>
+              </div>
+              <div class="admin-product-actions">
+                <button class="secondary-btn" type="button" data-edit-id="${escapeHtml(product.id)}">Edit</button>
+                <button class="primary-btn" type="button" data-delete-id="${escapeHtml(product.id)}">Delete</button>
+              </div>
+            </article>
+          `
+        )
+        .join("");
+
+      if (products.length === 0) {
+        productList.innerHTML = '<p class="catalog-status">No products have been added yet.</p>';
+      }
+
+      productList.querySelectorAll("[data-edit-id]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const product = products.find((item) => item.id === button.dataset.editId);
+          if (!product) return;
+
+          document.querySelector("#product-id").value = product.id;
+          document.querySelector("#product-name").value = product.name;
+          document.querySelector("#product-category").value = product.category;
+          document.querySelector("#product-price").value = product.price;
+          document.querySelector("#product-image").value = product.image;
+          document.querySelector("#product-description").value = product.description;
+          saveButton.textContent = "Update product";
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+
+      productList.querySelectorAll("[data-delete-id]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          if (!window.confirm("Delete this product from the store?")) return;
+
+          button.disabled = true;
+          try {
+            await supabaseRequest(`/rest/v1/products?id=eq.${encodeURIComponent(button.dataset.deleteId)}`, {
+              method: "DELETE",
+              authenticated: true
+            });
+            setStatus(status, "Product deleted.");
+            await renderAdminProducts();
+            resetForm();
+          } catch (error) {
+            button.disabled = false;
+            setStatus(status, error.message, true);
+          }
+        });
+      });
+    } catch (error) {
+      productList.innerHTML = `<p class="catalog-status status-error">${escapeHtml(error.message)}</p>`;
+      if (!readAdminSession()) {
+        document.dispatchEvent(new Event("admin-session-expired"));
+      }
+    }
+  };
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const formData = new FormData(form);
+    const productId = document.querySelector("#product-id").value;
+    const image = formData.get("image").toString().trim();
+    const product = {
+      name: formData.get("name").toString().trim(),
+      category: formData.get("category").toString().trim(),
+      price: Number(formData.get("price")),
+      image,
+      description: formData.get("description").toString().trim()
+    };
+
+    if (!product.name || !product.category || !product.description || !Number.isFinite(product.price) || product.price <= 0) {
+      setStatus(status, "Enter a name, category, description, and a price greater than zero.", true);
+      return;
+    }
+    if (!/^https?:\/\//i.test(image)) {
+      setStatus(status, "Use an image URL beginning with http:// or https://.", true);
+      return;
+    }
+
+    saveButton.disabled = true;
+    setStatus(status, "");
+    try {
+      const path = productId
+        ? `/rest/v1/products?id=eq.${encodeURIComponent(productId)}`
+        : "/rest/v1/products";
+      await supabaseRequest(path, {
+        method: productId ? "PATCH" : "POST",
+        body: product,
+        authenticated: true,
+        headers: { Prefer: "return=representation" }
+      });
+      setStatus(status, productId ? "Product updated." : "Product added.");
+      resetForm();
+      await renderAdminProducts();
+    } catch (error) {
+      setStatus(status, error.message, true);
+    } finally {
+      saveButton.disabled = false;
     }
   });
 
-  document.querySelectorAll(".close-modal").forEach((button) => {
-    button.addEventListener("click", closeModal);
+  resetButton.addEventListener("click", () => {
+    resetForm();
+    setStatus(status, "");
   });
 
-  document.querySelector("[data-close-modal='true']").addEventListener("click", closeModal);
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !modal.classList.contains("hidden")) {
-      closeModal();
-    }
-  });
+  return renderAdminProducts;
 }
 
-async function hashString(value) {
-  const encoded = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", encoded);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function setupAdminAuth() {
+function setupAdminAuth(renderAdminProducts) {
   const loginPanel = document.querySelector("#admin-login-panel");
   const adminContent = document.querySelector("#admin-content");
   const loginForm = document.querySelector("#admin-login-form");
-  const loginError = document.querySelector("#admin-login-error");
+  const loginStatus = document.querySelector("#admin-login-status");
   const logoutButton = document.querySelector("#admin-logout-btn");
 
   if (!loginPanel || !adminContent || !loginForm) {
@@ -234,155 +463,82 @@ function setupAdminAuth() {
     adminContent.classList.toggle("hidden", !isAuthenticated);
   };
 
-  const authenticated = sessionStorage.getItem(ADMIN_SESSION_KEY) === "true";
-  setAuthView(authenticated);
-
-  loginForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const username = document.querySelector("#admin-username").value.trim();
-    const password = document.querySelector("#admin-password").value.trim();
-    const usernameHash = await hashString(username);
-    const passwordHash = await hashString(password);
-
-    if (usernameHash === ADMIN_USERNAME_HASH && passwordHash === ADMIN_PASSWORD_HASH) {
-      sessionStorage.setItem(ADMIN_SESSION_KEY, "true");
-      setAuthView(true);
-      loginForm.reset();
-      if (loginError) {
-        loginError.classList.add("hidden");
-      }
-      return;
-    }
-
-    if (loginError) {
-      loginError.classList.remove("hidden");
-    }
-  });
-
-  if (logoutButton) {
-    logoutButton.addEventListener("click", () => {
-      sessionStorage.removeItem(ADMIN_SESSION_KEY);
-      setAuthView(false);
-      loginForm.reset();
-      if (loginError) {
-        loginError.classList.add("hidden");
-      }
-    });
-  }
-}
-
-function setupAdminPage() {
-  const form = document.querySelector("#product-form");
-  const productList = document.querySelector("#admin-product-list");
-  const saveButton = document.querySelector("#save-product-btn");
-  const resetButton = document.querySelector("#reset-form-btn");
-  const restoreSampleButton = document.querySelector("#reset-sample-data-btn");
-
-  if (!form || !productList) {
+  if (!isBackendConfigured()) {
+    setAuthView(false);
+    setStatus(loginStatus, "The store database is not configured. Add the Supabase project URL and anon key to config.js.", true);
+    loginForm.querySelector("button[type='submit']").disabled = true;
     return;
   }
 
-  const renderAdminProducts = () => {
-    const products = getProducts();
+  const session = readAdminSession();
+  setAuthView(Boolean(session));
 
-    productList.innerHTML = products
-      .map(
-        (product) => `
-          <article class="admin-product-item">
-            <img src="${product.image}" alt="${product.name}" />
-            <div class="admin-product-copy">
-              <h3>${product.name}</h3>
-              <p><strong>${product.category}</strong> · ${formatCurrency(product.price)}</p>
-              <p>${product.description}</p>
-            </div>
-            <div class="admin-product-actions">
-              <button class="secondary-btn" type="button" data-edit-id="${product.id}">Edit</button>
-              <button class="primary-btn" type="button" data-delete-id="${product.id}">Delete</button>
-            </div>
-          </article>
-        `
-      )
-      .join("");
-
-    document.querySelectorAll("[data-edit-id]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const product = getProducts().find((item) => item.id === button.dataset.editId);
-        if (!product) return;
-
-        document.querySelector("#product-id").value = product.id;
-        document.querySelector("#product-name").value = product.name;
-        document.querySelector("#product-category").value = product.category;
-        document.querySelector("#product-price").value = product.price;
-        document.querySelector("#product-image").value = product.image;
-        document.querySelector("#product-description").value = product.description;
-        saveButton.textContent = "Update product";
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      });
-    });
-
-    document.querySelectorAll("[data-delete-id]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const products = getProducts();
-        const nextProducts = products.filter((item) => item.id !== button.dataset.deleteId);
-        saveProducts(nextProducts);
-        renderAdminProducts();
-        resetForm();
-      });
-    });
-  };
-
-  const resetForm = () => {
-    form.reset();
-    document.querySelector("#product-id").value = "";
-    saveButton.textContent = "Save product";
-  };
-
-  form.addEventListener("submit", (event) => {
+  loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const email = document.querySelector("#admin-email").value.trim();
+    const password = document.querySelector("#admin-password").value;
+    const loginButton = loginForm.querySelector("button[type='submit']");
+    loginButton.disabled = true;
+    setStatus(loginStatus, "");
 
-    const formData = new FormData(form);
-    const productId = document.querySelector("#product-id").value;
-    const product = {
-      id: productId || `p${Date.now()}`,
-      name: formData.get("name").toString().trim(),
-      category: formData.get("category").toString().trim(),
-      price: Number(formData.get("price")),
-      image: formData.get("image").toString().trim(),
-      description: formData.get("description").toString().trim()
-    };
-
-    if (!product.name || !product.category || !product.image || !product.description || !product.price) {
-      return;
+    try {
+      const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ email, password })
+      });
+      const authenticatedSession = await parseResponse(response);
+      storeAdminSession(authenticatedSession);
+      loginForm.reset();
+      setAuthView(true);
+      await renderAdminProducts();
+    } catch (error) {
+      setStatus(loginStatus, error.message, true);
+    } finally {
+      loginButton.disabled = false;
     }
-
-    const products = getProducts();
-    const existingIndex = products.findIndex((item) => item.id === product.id);
-
-    if (existingIndex >= 0) {
-      products[existingIndex] = product;
-    } else {
-      products.unshift(product);
-    }
-
-    saveProducts(products);
-    renderAdminProducts();
-    resetForm();
   });
 
-  resetButton.addEventListener("click", resetForm);
-
-  restoreSampleButton.addEventListener("click", () => {
-    saveProducts(defaultProducts);
-    renderAdminProducts();
-    resetForm();
+  document.addEventListener("admin-session-expired", () => {
+    clearAdminSession();
+    setAuthView(false);
+    setStatus(loginStatus, "Your admin session has expired. Please log in again.", true);
   });
 
-  renderAdminProducts();
+  if (logoutButton) {
+    logoutButton.addEventListener("click", async () => {
+      const currentSession = readAdminSession();
+      clearAdminSession();
+      setAuthView(false);
+      setStatus(loginStatus, "");
+      if (currentSession && currentSession.accessToken) {
+        try {
+          const response = await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+            method: "POST",
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${currentSession.accessToken}`
+            }
+          });
+          if (!response.ok) {
+            await parseResponse(response);
+          }
+        } catch (error) {
+          setStatus(loginStatus, `Signed out on this device, but server sign-out failed: ${error.message}`, true);
+        }
+      }
+    });
+  }
+
+  if (session && renderAdminProducts) {
+    renderAdminProducts();
+  }
 }
 
 window.addEventListener("DOMContentLoaded", () => {
   setupHomePage();
-  setupAdminAuth();
-  setupAdminPage();
+  setupAdminAuth(setupAdminPage());
 });
