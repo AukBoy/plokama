@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plokama.lk | Mobile Accessories</title>
+    <meta
+      name="description"
+      content="Plokama.lk offers mobile phone accessories with product catalog and WhatsApp ordering."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container nav-wrap">
+        <a href="index.html" class="brand">
+          <span class="brand-mark">P</span>
+          <span>Plokama.lk</span>
+        </a>
+
+        <nav class="main-nav" aria-label="Main navigation">
+          <a href="index.html">Home</a>
+          <a href="#product-grid">Shop</a>
+          <a href="#featured">Featured</a>
+          <a href="admin.html">Admin</a>
+        </nav>
+
+        <a class="nav-cta" href="https://wa.me/94769129718" target="_blank" rel="noreferrer">
+          Order via WhatsApp
+        </a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="container hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow">Fast mobile essentials</p>
+            <h1>Upgrade your phone with premium accessories.</h1>
+            <p class="hero-text">
+              Discover chargers, cases, screen guards, earbuds, and power solutions made for everyday mobile use.
+            </p>
+            <div class="hero-actions">
+              <a href="#product-grid" class="primary-btn">Shop now</a>
+              <a href="https://wa.me/94769129718?text=Hi%20I%20need%20help%20choosing%20a%20mobile%20accessory" target="_blank" rel="noreferrer" class="secondary-btn">
+                Chat with us
+              </a>
+            </div>
+            <ul class="trust-points">
+              <li>Same-day dispatch</li>
+              <li>Secure payment options</li>
+              <li>Trusted support</li>
+            </ul>
+          </div>
+
+        </div>
+      </section>
+
+      <section id="featured" class="featured-section container">
+        <div class="section-heading">
+          <p class="eyebrow">Top picks</p>
+          <h2>Best-selling accessories</h2>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-item">
+            <span>⚡</span>
+            <h3>Fast charging</h3>
+            <p>Rapid power-up for busy days and travel.</p>
+          </article>
+          <article class="feature-item">
+            <span>🛡️</span>
+            <h3>Screen protection</h3>
+            <p>Scratch-resistant glass and safety films.</p>
+          </article>
+          <article class="feature-item">
+            <span>🎧</span>
+            <h3>Audio gear</h3>
+            <p>Wireless earbuds and sound accessories.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="catalog container">
+        <div class="section-heading section-heading-row">
+          <div>
+            <p class="eyebrow">Our catalog</p>
+            <h2>Shop by category</h2>
+          </div>
+          <a href="admin.html" class="text-link">Manage products</a>
+        </div>
+
+        <div id="product-grid" class="product-grid" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <div id="product-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-backdrop" data-close-modal="true"></div>
+      <div class="modal-dialog">
+        <button class="close-modal" aria-label="Close product dialog">×</button>
+        <div class="modal-content">
+          <img id="modal-image" src="" alt="Product preview" />
+          <div class="modal-body">
+            <p id="modal-category" class="modal-category"></p>
+            <h3 id="modal-title"></h3>
+            <p id="modal-price" class="modal-price"></p>
+            <p id="modal-description" class="modal-description"></p>
+            <div class="modal-actions">
+              <button id="buy-now-btn" class="primary-btn">Order on WhatsApp</button>
+              <button class="secondary-btn close-modal" type="button">Continue shopping</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>© 2026 Plokama.lk</p>
+        <a href="https://wa.me/94769129718" target="_blank" rel="noreferrer">WhatsApp: +94 769 129 718</a>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>

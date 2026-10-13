@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel | Plokama.lk</title>
+    <meta name="description" content="Admin panel for adding and editing products for Plokama.lk." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="admin-page">
+    <header class="site-header admin-header">
+      <div class="container nav-wrap">
+        <a href="index.html" class="brand">
+          <span class="brand-mark">P</span>
+          <span>Plokama.lk</span>
+        </a>
+
+        <nav class="main-nav" aria-label="Main navigation">
+          <a href="index.html">Home</a>
+          <a href="admin.html" class="active">Admin</a>
+        </nav>
+
+        <a class="nav-cta" href="https://wa.me/94769129718" target="_blank" rel="noreferrer">
+          Contact seller
+        </a>
+      </div>
+    </header>
+
+    <main class="admin-main container">
+      <section id="admin-login-panel" class="auth-panel">
+        <div class="auth-box">
+          <p class="eyebrow">Admin access</p>
+          <h2>Login to manage products</h2>
+          <form id="admin-login-form" class="auth-form">
+            <label>
+              Username
+              <input id="admin-username" name="username" type="text" placeholder="Enter username" required />
+            </label>
+
+            <label>
+              Password
+              <input id="admin-password" name="password" type="password" placeholder="Enter password" required />
+            </label>
+
+            <p id="admin-login-error" class="auth-error hidden" aria-live="polite">
+              Invalid username or password.
+            </p>
+
+            <button type="submit" class="primary-btn">Login</button>
+          </form>
+        </div>
+      </section>
+
+      <div id="admin-content" class="hidden">
+        <section class="admin-panel">
+          <div class="section-heading section-heading-row">
+            <div>
+              <p class="eyebrow">Dashboard</p>
+              <h2>Add or edit products</h2>
+            </div>
+            <button class="secondary-btn" id="admin-logout-btn" type="button">Logout</button>
+          </div>
+
+          <form id="product-form" class="product-form">
+            <input type="hidden" id="product-id" />
+
+            <div class="field-grid">
+              <label>
+                Product name
+                <input id="product-name" name="name" type="text" placeholder="Type product name" required />
+              </label>
+
+              <label>
+                Category
+                <select id="product-category" name="category" required>
+                  <option value="">Select category</option>
+                  <option value="Chargers">Chargers</option>
+                  <option value="Cases">Cases</option>
+                  <option value="Screen Guards">Screen Guards</option>
+                  <option value="Earbuds">Earbuds</option>
+                  <option value="Power Banks">Power Banks</option>
+                  <option value="Cables">Cables</option>
+                </select>
+              </label>
+
+              <label>
+                Price (TZS)
+                <input id="product-price" name="price" type="number" min="0" step="100" placeholder="25000" required />
+              </label>
+
+              <label>
+                Image URL
+                <input id="product-image" name="image" type="url" placeholder="https://example.com/image.jpg" required />
+              </label>
+            </div>
+
+            <label>
+              Description
+              <textarea id="product-description" name="description" rows="4" placeholder="Describe the product" required></textarea>
+            </label>
+
+            <div class="form-actions">
+              <button type="submit" class="primary-btn" id="save-product-btn">Save product</button>
+              <button type="button" class="secondary-btn" id="reset-form-btn">Clear</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="product-management">
+          <div class="section-heading section-heading-row">
+            <div>
+              <p class="eyebrow">Inventory</p>
+              <h2>Current products</h2>
+            </div>
+            <button class="secondary-btn" id="reset-sample-data-btn" type="button">Restore samples</button>
+          </div>
+
+          <div id="admin-product-list" class="admin-product-list" aria-live="polite"></div>
+        </section>
+      </div>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
